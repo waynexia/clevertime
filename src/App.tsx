@@ -6,17 +6,57 @@ import GlobalInfo from './components/GlobalInfo.tsx';
 import OptimizedSQL from './components/OptimizedSQL.tsx';
 import 'uno.css';
 
+interface Column {
+  name: string;
+  dataType: string;
+  semanticType: string;
+  nullable: boolean;
+  index: string | null;
+}
+
 const { Content } = Layout;
 const { Title } = Typography;
 
 const App: React.FC = () => {
-  const [parsedColumns, setParsedColumns] = useState<string[]>([]);
+  const [parsedColumns, setParsedColumns] = useState<Column[]>([]);
   const [optimizedSQL, setOptimizedSQL] = useState<string>('');
+  const [showGlobalInfo, setShowGlobalInfo] = useState(false);
 
   const handleSQLParse = (sql: string) => {
     // This is a placeholder for the actual SQL parsing logic
-    const mockParsedColumns = ['id', 'name', 'email', 'created_at'];
+    const mockParsedColumns: Column[] = [
+      {
+        name: 'id',
+        dataType: 'bigint',
+        semanticType: 'identifier',
+        nullable: false,
+        index: 'primary'
+      },
+      {
+        name: 'name',
+        dataType: 'varchar',
+        semanticType: 'text',
+        nullable: true,
+        index: null
+      },
+      {
+        name: 'email',
+        dataType: 'varchar',
+        semanticType: 'email',
+        nullable: false,
+        index: 'unique'
+      },
+      {
+        name: 'created_at',
+        dataType: 'timestamp',
+        semanticType: 'timestamp',
+        nullable: false,
+        index: 'btree'
+      }
+    ];
     setParsedColumns(mockParsedColumns);
+    setShowGlobalInfo(false);
+    setOptimizedSQL('');
     message.success('SQL parsed successfully');
   };
 
@@ -57,11 +97,19 @@ LIMIT
           {parsedColumns.length > 0 && (
             <>
               <ColumnInfo columns={parsedColumns} />
-              <GlobalInfo />
               <div className="text-center mt-6">
-                <Button type="primary" onClick={() => handleSubmit([], {})}>
-                  Optimize SQL
-                </Button>
+                {!showGlobalInfo ? (
+                  <Button type="primary" onClick={() => setShowGlobalInfo(true)}>
+                    Next: Global Information
+                  </Button>
+                ) : (
+                  <>
+                    <GlobalInfo />
+                    <Button type="primary" onClick={() => handleSubmit([], {})} className="mt-4">
+                      Optimize SQL
+                    </Button>
+                  </>
+                )}
               </div>
             </>
           )}
