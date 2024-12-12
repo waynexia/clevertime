@@ -4,6 +4,7 @@ export interface Column {
     semanticType: string;
     nullable: boolean;
     index: string | null;
+    cardinality: number;
 }
 
 interface SQLResponse {
@@ -55,7 +56,8 @@ export async function parseSQL(sql: string, server_addr: string): Promise<Column
             semanticType: col.column_def.name.value === timeIndexColumn ? 'timestamp' : primaryKeyColumns.has(col.column_def.name.value) ? 'tag' : 'field',
             nullable: col.column_def.name.value !== timeIndexColumn,
             index: primaryKeyColumns.has(col.column_def.name.value) ? 'primary' :
-                col.column_def.name.value === timeIndexColumn ? 'time' : null
+                col.column_def.name.value === timeIndexColumn ? 'time' : null,
+            cardinality: 1
         }));
     } catch (error) {
         console.error('Error parsing SQL:', error);

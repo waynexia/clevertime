@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Form, Select, Switch, Tag, Space, InputNumber, Button, Tooltip } from 'antd';
 import { UpOutlined, DownOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { Column } from '../utils/parser';
@@ -7,14 +7,30 @@ const { Option } = Select;
 
 interface ColumnInfoProps {
     columns: Column[];
+    onUpdate?: (values: Column[]) => void;
 }
 
-const ColumnInfo: React.FC<ColumnInfoProps> = ({ columns }) => {
+const ColumnInfo: React.FC<ColumnInfoProps> = ({ columns, onUpdate }) => {
+    const [form] = Form.useForm();
     const [collapsed, setCollapsed] = useState({
         timestamp: false,
         tag: false,
         field: false
     });
+
+    // Initialize form values when columns change
+    useEffect(() => {
+        const formValues = columns.reduce((acc, column) => ({
+            ...acc,
+            [column.name]: {
+                dataType: column.dataType,
+                index: column.index,
+                nullable: column.nullable,
+                cardinality: column.cardinality
+            }
+        }), {});
+        form.setFieldsValue(formValues);
+    }, [columns, form]);
 
     const getSemanticTypeColor = (type: string) => {
         switch (type) {
@@ -74,12 +90,12 @@ const ColumnInfo: React.FC<ColumnInfoProps> = ({ columns }) => {
             <div className="flex items-center gap-4">
                 <div className="flex-1">
                     <span className="text-xs text-gray-500">Type</span>
-                    <Form.Item name={`${column.name}-type`} initialValue={column.dataType} noStyle>
+                    <Form.Item name={[column.name, 'dataType']} noStyle>
                         <Select size="small" style={{ width: '100%' }} placeholder="Data Type">
                             <Option value="bigint">BigInt</Option>
                             <Option value="int">Integer</Option>
                             <Option value="varchar">VARCHAR</Option>
-                            <Option value="text">Text</Option>
+                            <Option value="string">String</Option>
                             <Option value="timestamp">Timestamp</Option>
                             <Option value="datetime">DateTime</Option>
                             <Option value="boolean">Boolean</Option>
@@ -95,7 +111,7 @@ const ColumnInfo: React.FC<ColumnInfoProps> = ({ columns }) => {
                             <QuestionCircleOutlined className="ml-1 text-gray-400" />
                         </Tooltip>
                     </span>
-                    <Form.Item name={`${column.name}-index`} initialValue={column.index} noStyle>
+                    <Form.Item name={[column.name, 'index']} noStyle>
                         <Select size="small" style={{ width: '100%' }}>
                             <Option value="none">None</Option>
                             <Option value="primary">Primary</Option>
@@ -109,7 +125,7 @@ const ColumnInfo: React.FC<ColumnInfoProps> = ({ columns }) => {
                 <div className="mt-2 flex justify-between items-center">
                     <Space>
                         <span className="text-xs text-gray-500">Filter/Search Query</span>
-                        <Form.Item name={`${column.name}-nullable`} valuePropName="checked" initialValue={false} noStyle>
+                        <Form.Item name={[column.name, 'nullable']} valuePropName="checked" noStyle>
                             <Switch size="small" />
                         </Form.Item>
                     </Space>
@@ -120,7 +136,7 @@ const ColumnInfo: React.FC<ColumnInfoProps> = ({ columns }) => {
                                 <QuestionCircleOutlined className="ml-1 text-gray-400" />
                             </Tooltip>
                         </span>
-                        <Form.Item name={`${column.name}-cardinality`} initialValue={0} noStyle>
+                        <Form.Item name={[column.name, 'cardinality']} noStyle>
                             <InputNumber size="small" min={0} style={{ width: '80px' }} />
                         </Form.Item>
                     </Space>
@@ -130,8 +146,20 @@ const ColumnInfo: React.FC<ColumnInfoProps> = ({ columns }) => {
     );
 
     return (
-        <Form layout="vertical" className="mb-6">
-            <h3 className="text-lg font-semibold mb-4">Column Information</h3>
+        <Form
+            layout="vertical"
+            className="mb-6"
+            form={form}
+            onValuesChange={(_, allValues) => {
+                // Transform form values back to Column[]
+                const updatedColumns = columns.map(col => ({
+                    ...col,
+                    ...allValues[col.name]
+                }));
+                onUpdate?.(updatedColumns);
+            }}
+        >
+            <h3 className="text-lg font-semibold mb-4 w-full text-center">Column Information</h3>
 
             {groupedColumns.timestamp.length > 0 && (
                 <div className="mb-6">
