@@ -36,7 +36,7 @@ const OptimizedSQL: React.FC<OptimizedSQLProps> = ({ suggestions = mockSuggestio
     return (
         <div className="max-w-4xl mx-auto">
             <Card className="mt-6">
-                <Title level={4} className="mb-4">SQL Optimization Suggestions</Title>
+                <Title level={4} className="mb-4">Optimization Suggestions</Title>
                 <Collapse>
                     {suggestions.map((suggestion, index) => (
                         <Panel
