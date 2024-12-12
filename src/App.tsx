@@ -4,15 +4,9 @@ import SQLInput from './components/SQLInput.tsx';
 import ColumnInfo from './components/ColumnInfo.tsx';
 import GlobalInfo from './components/GlobalInfo.tsx';
 import OptimizedSQL from './components/OptimizedSQL.tsx';
+import URLInput from './components/URLInput.tsx';
+import { Column, parseSQL } from './utils/parser';
 import 'uno.css';
-
-interface Column {
-  name: string;
-  dataType: string;
-  semanticType: string;
-  nullable: boolean;
-  index: string | null;
-}
 
 const { Content } = Layout;
 const { Title } = Typography;
@@ -21,46 +15,19 @@ const App: React.FC = () => {
   const [parsedColumns, setParsedColumns] = useState<Column[]>([]);
   const [optimizedSQL, setOptimizedSQL] = useState<string>('');
   const [showGlobalInfo, setShowGlobalInfo] = useState(false);
+  const [serverUrl, setServerUrl] = useState<string>('');
 
-  const handleSQLParse = (sql: string) => {
-    // This is a placeholder for the actual SQL parsing logic
-    const mockParsedColumns: Column[] = [
-      {
-        name: 'id',
-        dataType: 'bigint',
-        semanticType: 'identifier',
-        nullable: false,
-        index: 'primary'
-      },
-      {
-        name: 'name',
-        dataType: 'varchar',
-        semanticType: 'text',
-        nullable: true,
-        index: null
-      },
-      {
-        name: 'email',
-        dataType: 'varchar',
-        semanticType: 'email',
-        nullable: false,
-        index: 'unique'
-      },
-      {
-        name: 'created_at',
-        dataType: 'timestamp',
-        semanticType: 'timestamp',
-        nullable: false,
-        index: 'btree'
-      }
-    ];
-    setParsedColumns(mockParsedColumns);
+  const handleSQLParse = async (sql: string) => {
+    const parsedColumns = await parseSQL(sql, serverUrl);
+    setParsedColumns(parsedColumns);
     setShowGlobalInfo(false);
     setOptimizedSQL('');
     message.success('SQL parsed successfully');
   };
 
   const handleSubmit = (columnData: any, globalData: any) => {
+    // Now we have access to serverUrl for API calls
+    console.log('Using server URL:', `https://${serverUrl}`);
     // This is a placeholder for the actual SQL optimization logic
     const mockOptimizedSQL = `
 SELECT 
@@ -93,6 +60,12 @@ LIMIT
         <Content className="p-6">
           <Title level={1} className="text-center mb-4">Clevertime</Title>
           <Title level={2} className="text-center mb-6">Model Optimizer for GreptimeDB</Title>
+
+          <URLInput onSubmit={(url) => {
+            console.log('URL:', url);
+            setServerUrl(url);
+          }} />
+
           <SQLInput onParse={handleSQLParse} />
           {parsedColumns.length > 0 && (
             <>
