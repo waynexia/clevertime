@@ -35,7 +35,10 @@ export async function parseSQL(sql: string, server_addr: string): Promise<Column
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        const data: SQLResponse = await response.json();
+        const data_slice: SQLResponse[] = await response.json();
+
+        const data: SQLResponse = data_slice[0]
+        console.log(data)
 
         // Find primary key columns
         const primaryKeyColumns = new Set(
