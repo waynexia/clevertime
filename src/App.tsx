@@ -34,12 +34,12 @@ const App: React.FC = () => {
                   children: <ModelOptimizer />,
                   icon: <ExperimentOutlined />,
                 },
-                {
-                  key: 'config',
-                  label: 'Config Optimizer',
-                  children: <ConfigOptimizer />,
-                  icon: <SettingOutlined />,
-                },
+                // {
+                //   key: 'config',
+                //   label: 'Config Optimizer',
+                //   children: <ConfigOptimizer />,
+                //   icon: <SettingOutlined />,
+                // },
                 {
                   key: 'cache',
                   label: 'Cache Calculator',

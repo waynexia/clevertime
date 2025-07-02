@@ -23,9 +23,10 @@ interface ResourceConfig {
 
 interface ResourceAllocatorProps {
     config: ResourceConfig;
+    onConfigChange?: (id: string, totalSize: number, parts: ResourcePart[]) => void;
 }
 
-const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config }) => {
+const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config, onConfigChange }) => {
     const [totalSize, setTotalSize] = useState(config.initialTotalSize);
     const totalUsedPercent = config.parts.reduce((sum, part) => sum + part.percentage, 0);
     const initialUnusedPercent = Math.max(0, 100 - totalUsedPercent);
@@ -50,6 +51,13 @@ const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config }) => {
             }
         };
     }, [parts, totalSize]);
+
+    // Notify parent of config changes
+    useEffect(() => {
+        if (onConfigChange) {
+            onConfigChange(config.id, totalSize, parts);
+        }
+    }, [totalSize, parts, onConfigChange, config.id]);
 
     const startWaveAnimation = () => {
         const animate = () => {
