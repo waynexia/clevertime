@@ -1,8 +1,9 @@
 import React from 'react';
 import { Layout, Typography, ConfigProvider, Tabs } from 'antd';
-import { ExperimentOutlined, SettingOutlined, BarChartOutlined } from '@ant-design/icons';
+import { ExperimentOutlined, SettingOutlined, BarChartOutlined, DatabaseOutlined } from '@ant-design/icons';
 import ModelOptimizer from './components/ModelOptimizer';
 import ConfigOptimizer from './components/ConfigOptimizer';
+import CacheCalculator from './cache_calculator/CacheCalculator';
 import 'uno.css';
 import MitoViz from './mitoviz_components/MitoViz';
 
@@ -38,6 +39,12 @@ const App: React.FC = () => {
                   label: 'Config Optimizer',
                   children: <ConfigOptimizer />,
                   icon: <SettingOutlined />,
+                },
+                {
+                  key: 'cache',
+                  label: 'Cache Calculator',
+                  children: <CacheCalculator />,
+                  icon: <DatabaseOutlined />,
                 },
                 {
                   key: 'mitoviz',
