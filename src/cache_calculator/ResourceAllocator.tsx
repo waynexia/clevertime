@@ -37,12 +37,85 @@ const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config }) => {
     ]);
     const [activePart, setActivePart] = useState<string | null>(null);
     const svgRef = useRef<SVGSVGElement>(null);
+    const animationRef = useRef<number>();
 
     const activePartData = parts.find(p => p.id === activePart);
 
     useEffect(() => {
         drawLines();
+        startWaveAnimation();
+        return () => {
+            if (animationRef.current) {
+                cancelAnimationFrame(animationRef.current);
+            }
+        };
     }, [parts, totalSize]);
+
+    const startWaveAnimation = () => {
+        const animate = () => {
+            updateWaves();
+            animationRef.current = requestAnimationFrame(animate);
+        };
+        animate();
+    };
+
+    const updateWaves = () => {
+        if (!svgRef.current) return;
+
+        const time = Date.now() * 0.001; // Convert to seconds
+        const waves = svgRef.current.querySelectorAll('.wave-path');
+
+        waves.forEach((wave, index) => {
+            const path = wave as SVGPathElement;
+            const segmentIndex = Math.floor(index / 2); // Two waves per segment
+            const isUpperWave = index % 2 === 0;
+
+            // Different wave parameters for different layers but same frequency for continuity
+            const amplitude = isUpperWave ? 6 : 4;
+            const speed = isUpperWave ? 1.2 : 1.8;
+            const phase = isUpperWave ? 0 : Math.PI * 0.4; // Phase difference between layers
+
+            const d = generateWavePath(
+                segmentIndex,
+                1, // Use same frequency for all segments for continuity
+                amplitude,
+                time * speed + phase
+            );
+            path.setAttribute('d', d);
+        });
+    };
+
+    const generateWavePath = (segmentIndex: number, _frequency: number, amplitude: number, timeOffset: number) => {
+        const totalWidth = 400;
+        let currentX = 0;
+
+        // Calculate segment boundaries
+        for (let i = 0; i < segmentIndex; i++) {
+            currentX += (parts[i].percentage / 100) * totalWidth;
+        }
+
+        const segmentWidth = (parts[segmentIndex].percentage / 100) * totalWidth;
+        const endX = currentX + segmentWidth;
+
+        if (segmentWidth <= 0) return '';
+
+        let path = `M ${currentX} 20`; // Start at middle height
+
+        // Generate continuous wave points across the entire pipe width
+        const steps = Math.max(10, Math.floor(segmentWidth / 2));
+        for (let i = 0; i <= steps; i++) {
+            const x = currentX + (i / steps) * segmentWidth;
+            // Use global x position for continuous waves across all segments
+            const globalNormalizedX = x / totalWidth;
+            const y = 20 + Math.sin(globalNormalizedX * Math.PI * 8 + timeOffset) * amplitude;
+            path += ` L ${x} ${y}`;
+        }
+
+        // Close the path to create a filled area
+        path += ` L ${endX} 40 L ${currentX} 40 Z`;
+
+        return path;
+    };
 
     const handleFineTune = (type: 'percent' | 'size', value: number) => {
         if (!activePartData) return;
@@ -100,11 +173,81 @@ const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config }) => {
     const drawLines = () => {
         if (!svgRef.current) return;
 
-        // Clear existing lines
+        // Clear existing content
         svgRef.current.innerHTML = '';
 
-        // This is a simplified version - in a real implementation you'd calculate 
-        // proper coordinates based on pipe and legend positions
+        // Create base pipe structure with waves
+        const totalWidth = 400;
+        let currentX = 0;
+
+        parts.forEach((part, _index) => {
+            const segmentWidth = (part.percentage / 100) * totalWidth;
+
+            if (segmentWidth > 0) {
+                // Create inner wave layer (lighter)
+                const innerWave = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                innerWave.classList.add('wave-path');
+                innerWave.setAttribute('fill', part.color);
+                innerWave.setAttribute('opacity', '0.6');
+                svgRef.current!.appendChild(innerWave);
+
+                // Create upper wave layer (deeper color)
+                const upperWave = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                upperWave.classList.add('wave-path');
+                const darkerColor = adjustColorBrightness(part.color, -40);
+                upperWave.setAttribute('fill', darkerColor);
+                upperWave.setAttribute('opacity', '0.8');
+                svgRef.current!.appendChild(upperWave);
+
+                currentX += segmentWidth;
+            }
+        });
+
+        // Add universal shade overlay
+        const shadeOverlay = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        shadeOverlay.setAttribute('x', '0');
+        shadeOverlay.setAttribute('y', '0');
+        shadeOverlay.setAttribute('width', totalWidth.toString());
+        shadeOverlay.setAttribute('height', '40');
+        shadeOverlay.setAttribute('fill', 'url(#pipeGradient)');
+        svgRef.current!.appendChild(shadeOverlay);
+
+        // Create gradient definition
+        const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+        gradient.setAttribute('id', 'pipeGradient');
+        gradient.setAttribute('x1', '0%');
+        gradient.setAttribute('y1', '0%');
+        gradient.setAttribute('x2', '0%');
+        gradient.setAttribute('y2', '100%');
+
+        const stop1 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+        stop1.setAttribute('offset', '0%');
+        stop1.setAttribute('stop-color', 'rgba(0,0,0,0.2)');
+
+        const stop2 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+        stop2.setAttribute('offset', '50%');
+        stop2.setAttribute('stop-color', 'rgba(255,255,255,0.1)');
+
+        const stop3 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+        stop3.setAttribute('offset', '100%');
+        stop3.setAttribute('stop-color', 'rgba(0,0,0,0.1)');
+
+        gradient.appendChild(stop1);
+        gradient.appendChild(stop2);
+        gradient.appendChild(stop3);
+        defs.appendChild(gradient);
+        svgRef.current!.insertBefore(defs, svgRef.current!.firstChild);
+    };
+
+    const adjustColorBrightness = (color: string, amount: number): string => {
+        // Simple color brightness adjustment
+        const hex = color.replace('#', '');
+        const r = Math.max(0, Math.min(255, parseInt(hex.substr(0, 2), 16) + amount));
+        const g = Math.max(0, Math.min(255, parseInt(hex.substr(2, 2), 16) + amount));
+        const b = Math.max(0, Math.min(255, parseInt(hex.substr(4, 2), 16) + amount));
+
+        return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
     };
 
     return (
@@ -130,21 +273,24 @@ const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config }) => {
 
             {/* Usage Pipe Visualization */}
             <div className="relative">
-                <div
-                    className="flex h-10 rounded-full overflow-hidden border border-gray-300 shadow-inner"
+                <svg
+                    ref={svgRef}
+                    className="w-full h-10 rounded-full overflow-hidden border border-gray-300 shadow-inner"
                     style={{ background: 'rgba(0, 0, 0, 0.1)' }}
-                >
+                    viewBox="0 0 400 40"
+                    preserveAspectRatio="none"
+                />
+                {/* Clickable overlay for segments */}
+                <div className="absolute inset-0 flex">
                     {parts.map((part, _index) => {
                         const isActive = activePart === part.id;
                         return (
                             <div
                                 key={part.id}
-                                className={`h-full transition-all duration-500 border-r border-gray-400 cursor-pointer hover:brightness-110 ${isActive ? 'ring-2 ring-blue-400 ring-inset' : ''
-                                    }`}
+                                className={`h-full transition-all duration-500 cursor-pointer hover:bg-white hover:bg-opacity-10 ${isActive ? 'ring-2 ring-blue-400 ring-inset' : ''}`}
                                 style={{
                                     width: `${part.percentage}%`,
-                                    backgroundColor: part.color,
-                                    boxShadow: isActive ? 'inset 0 0 0 2px rgba(59, 130, 246, 0.5)' : undefined,
+                                    backgroundColor: 'transparent',
                                 }}
                                 onClick={() => setActivePart(isActive ? null : part.id)}
                                 title={`${part.name}: ${(totalSize * (part.percentage / 100)).toFixed(1)} GB (${part.percentage.toFixed(0)}%)`}
@@ -156,7 +302,6 @@ const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config }) => {
 
             {/* Legends */}
             <div className="relative">
-                <svg ref={svgRef} className="absolute w-full h-full top-0 left-0 pointer-events-none" />
                 <div className="grid grid-cols-3 gap-2">
                     {parts.map(part => {
                         const partSize = totalSize * (part.percentage / 100);
