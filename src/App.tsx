@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Typography, ConfigProvider, Tabs } from 'antd';
-import { ExperimentOutlined, SettingOutlined, BarChartOutlined, DatabaseOutlined } from '@ant-design/icons';
+import { ExperimentOutlined, SettingOutlined, BarChartOutlined, DatabaseOutlined, EditOutlined } from '@ant-design/icons';
 import ModelOptimizer from './model_optimizer/ModelOptimizer';
 import ConfigOptimizer from './model_optimizer/ConfigOptimizer';
 import CacheCalculator from './cache_calculator/CacheCalculator';
 import 'uno.css';
 import MitoViz from './mitoviz/MitoViz';
+import SqlFormatter from './sql_formatter/SqlFormatter';
 
 const { Content } = Layout;
 const { Title } = Typography;
@@ -19,7 +20,7 @@ const App: React.FC = () => {
     const tabFromUrl = urlParams.get('tab');
 
     // Valid tab keys
-    const validTabs = ['model', 'cache', 'mitoviz'];
+    const validTabs = ['model', 'cache', 'mitoviz', 'sql'];
 
     if (tabFromUrl && validTabs.includes(tabFromUrl)) {
       setActiveKey(tabFromUrl);
@@ -77,6 +78,12 @@ const App: React.FC = () => {
                   label: 'MitoViz',
                   children: <MitoViz />,
                   icon: <BarChartOutlined />,
+                },
+                {
+                  key: 'sql',
+                  label: 'SQL Formatter',
+                  children: <SqlFormatter />,
+                  icon: <EditOutlined />,
                 },
               ]}
             />
