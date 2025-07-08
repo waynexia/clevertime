@@ -9,7 +9,7 @@ import { LinksTab } from './tabs/LinksTab.tsx'
 import { ShortcutsTab } from './tabs/ShortcutsTab.tsx'
 import { PluginsTab } from './tabs/PluginsTab.tsx'
 import { AdvancedTab } from './tabs/AdvancedTab.tsx'
-import { ConfigProvider } from './ConfigContext';
+import { ConfigProvider } from './ConfigContext.tsx';
 
 const items = [
     {

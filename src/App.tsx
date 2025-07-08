@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Typography, ConfigProvider, Tabs } from 'antd';
 import { ExperimentOutlined, SettingOutlined, BarChartOutlined, DatabaseOutlined } from '@ant-design/icons';
-import ModelOptimizer from './components/ModelOptimizer';
-import ConfigOptimizer from './components/ConfigOptimizer';
+import ModelOptimizer from './model_optimizer/ModelOptimizer';
+import ConfigOptimizer from './model_optimizer/ConfigOptimizer';
 import CacheCalculator from './cache_calculator/CacheCalculator';
 import 'uno.css';
-import MitoViz from './mitoviz_components/MitoViz';
+import MitoViz from './mitoviz/MitoViz';
 
 const { Content } = Layout;
 const { Title } = Typography;

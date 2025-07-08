@@ -1,8 +1,8 @@
 import React from 'react';
 import { Typography } from 'antd';
-import { WindowChrome } from '../config_components/window-chrome';
-import { NavTabs } from '../config_components/nav-tabs';
-import { SettingsPanel } from '../config_components/setting-pannel';
+import { WindowChrome } from '../config_ui/window-chrome';
+import { NavTabs } from '../config_ui/nav-tabs';
+import { SettingsPanel } from '../config_ui/setting-pannel';
 
 const { Title } = Typography;
 
