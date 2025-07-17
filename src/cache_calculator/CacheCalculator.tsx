@@ -34,7 +34,11 @@ interface ConfigState {
     parts: ResourcePart[];
 }
 
-const CacheCalculator: React.FC = () => {
+interface CacheCalculatorProps {
+    isActive?: boolean;
+}
+
+const CacheCalculator: React.FC<CacheCalculatorProps> = ({ isActive = true }) => {
     const [memoryState, setMemoryState] = useState<ConfigState | null>(null);
     const [diskState, setDiskState] = useState<ConfigState | null>(null);
     const [tomlConfig, setTomlConfig] = useState<string>('');
@@ -199,8 +203,8 @@ const CacheCalculator: React.FC = () => {
 
             <Card className="max-w-6xl mx-auto">
                 <div className="space-y-8">
-                    <ResourceAllocator config={memoryConfig} onConfigChange={handleConfigChange} />
-                    <ResourceAllocator config={diskConfig} onConfigChange={handleConfigChange} />
+                    <ResourceAllocator config={memoryConfig} onConfigChange={handleConfigChange} isActive={isActive} />
+                    <ResourceAllocator config={diskConfig} onConfigChange={handleConfigChange} isActive={isActive} />
 
                     {/* TOML Configuration Section */}
                     <div className="border-t pt-6">

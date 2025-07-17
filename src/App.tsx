@@ -70,7 +70,7 @@ const App: React.FC = () => {
                 {
                   key: 'cache',
                   label: 'Cache Calculator',
-                  children: <CacheCalculator />,
+                  children: <CacheCalculator isActive={activeKey === 'cache'} />,
                   icon: <DatabaseOutlined />,
                 },
                 {

@@ -24,9 +24,10 @@ interface ResourceConfig {
 interface ResourceAllocatorProps {
     config: ResourceConfig;
     onConfigChange?: (id: string, totalSize: number, parts: ResourcePart[]) => void;
+    isActive?: boolean;
 }
 
-const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config, onConfigChange }) => {
+const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config, onConfigChange, isActive = true }) => {
     const [totalSize, setTotalSize] = useState(config.initialTotalSize);
     const totalUsedPercent = config.parts.reduce((sum, part) => sum + part.percentage, 0);
     const initialUnusedPercent = Math.max(0, 100 - totalUsedPercent);
@@ -37,20 +38,43 @@ const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config, onConfigC
         { id: 'unused', name: 'Unused', percentage: initialUnusedPercent, color: '#e5e7eb' }
     ]);
     const [activePart, setActivePart] = useState<string | null>(null);
+    const [isPageVisible, setIsPageVisible] = useState(true);
     const svgRef = useRef<SVGSVGElement>(null);
     const animationRef = useRef<number>();
+    const shouldAnimateRef = useRef<boolean>(true);
 
     const activePartData = parts.find(p => p.id === activePart);
 
+    // Check if animation should be running
+    const shouldAnimate = isActive && isPageVisible;
+
+    // Update the ref whenever shouldAnimate changes
+    useEffect(() => {
+        shouldAnimateRef.current = shouldAnimate;
+    }, [shouldAnimate]);
+
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            setIsPageVisible(!document.hidden);
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, []);
+
     useEffect(() => {
         drawLines();
-        startWaveAnimation();
+        if (shouldAnimate) {
+            startWaveAnimation();
+        } else {
+            stopWaveAnimation();
+        }
         return () => {
-            if (animationRef.current) {
-                cancelAnimationFrame(animationRef.current);
-            }
+            stopWaveAnimation();
         };
-    }, [parts, totalSize]);
+    }, [parts, totalSize, shouldAnimate]);
 
     // Notify parent of config changes
     useEffect(() => {
@@ -60,11 +84,37 @@ const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config, onConfigC
     }, [totalSize, parts, onConfigChange, config.id]);
 
     const startWaveAnimation = () => {
-        const animate = () => {
-            updateWaves();
+        if (animationRef.current) {
+            cancelAnimationFrame(animationRef.current);
+        }
+
+        let lastFrameTime = 0;
+        const targetFPS = 30;
+        const frameInterval = 1000 / targetFPS; // ~33.33ms for 30fps
+
+        const animate = (currentTime: number) => {
+            // Check if animation should continue
+            if (!shouldAnimateRef.current) {
+                animationRef.current = undefined;
+                return;
+            }
+
+            // Limit to 30fps
+            if (currentTime - lastFrameTime >= frameInterval) {
+                updateWaves();
+                lastFrameTime = currentTime;
+            }
+
             animationRef.current = requestAnimationFrame(animate);
         };
-        animate();
+        animationRef.current = requestAnimationFrame(animate);
+    };
+
+    const stopWaveAnimation = () => {
+        if (animationRef.current) {
+            cancelAnimationFrame(animationRef.current);
+            animationRef.current = undefined;
+        }
     };
 
     const updateWaves = () => {
@@ -365,7 +415,7 @@ const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config, onConfigC
                             max={100}
                             step={1}
                             value={activePartData.percentage}
-                            onChange={(value) => handleFineTune('percent', value)}
+                            onChange={(value: number) => handleFineTune('percent', value)}
                             className="mt-2"
                         />
                     </div>
@@ -379,7 +429,7 @@ const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config, onConfigC
                             max={totalSize}
                             step={config.step}
                             value={totalSize * (activePartData.percentage / 100)}
-                            onChange={(value) => handleFineTune('size', value)}
+                            onChange={(value: number) => handleFineTune('size', value)}
                             className="mt-2"
                         />
                     </div>
