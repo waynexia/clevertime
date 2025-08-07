@@ -48,45 +48,55 @@ const App: React.FC = () => {
         <Content className="p-6">
           <Title level={1} className="text-center mb-4">Clevertime</Title>
 
-          <div className="max-w-800px mx-auto">
-            <Tabs
-              centered
-              activeKey={activeKey}
-              onChange={handleTabChange}
-              items={[
-                {
-                  key: 'model',
-                  label: 'Model Optimizer',
-                  children: <ModelOptimizer />,
-                  icon: <ExperimentOutlined />,
-                },
-                // {
-                //   key: 'config',
-                //   label: 'Config Optimizer',
-                //   children: <ConfigOptimizer />,
-                //   icon: <SettingOutlined />,
-                // },
-                {
-                  key: 'cache',
-                  label: 'Cache Calculator',
-                  children: <CacheCalculator isActive={activeKey === 'cache'} />,
-                  icon: <DatabaseOutlined />,
-                },
-                {
-                  key: 'mitoviz',
-                  label: 'MitoViz',
-                  children: <MitoViz />,
-                  icon: <BarChartOutlined />,
-                },
-                {
-                  key: 'sql',
-                  label: 'SQL Formatter',
-                  children: <SqlFormatter />,
-                  icon: <EditOutlined />,
-                },
-              ]}
-            />
-          </div>
+          <Tabs
+            centered
+            activeKey={activeKey}
+            onChange={handleTabChange}
+            items={[
+              {
+                key: 'model',
+                label: 'Model Optimizer',
+                children: (
+                  <div className="max-w-800px mx-auto">
+                    <ModelOptimizer />
+                  </div>
+                ),
+                icon: <ExperimentOutlined />,
+              },
+              // {
+              //   key: 'config',
+              //   label: 'Config Optimizer',
+              //   children: <ConfigOptimizer />,
+              //   icon: <SettingOutlined />,
+              // },
+              {
+                key: 'cache',
+                label: 'Cache Calculator',
+                children: (
+                  <div className="max-w-800px mx-auto">
+                    <CacheCalculator isActive={activeKey === 'cache'} />
+                  </div>
+                ),
+                icon: <DatabaseOutlined />,
+              },
+              {
+                key: 'mitoviz',
+                label: 'MitoViz',
+                children: <MitoViz />,
+                icon: <BarChartOutlined />,
+              },
+              {
+                key: 'sql',
+                label: 'SQL Formatter',
+                children: (
+                  <div className="max-w-800px mx-auto">
+                    <SqlFormatter />
+                  </div>
+                ),
+                icon: <EditOutlined />,
+              },
+            ]}
+          />
         </Content>
       </Layout>
     </ConfigProvider>
