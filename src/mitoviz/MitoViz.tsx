@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     Card,
     Input,
@@ -15,8 +15,14 @@ import {
     message,
     Tag,
     Divider,
+    Alert,
+    Spin,
 } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
+import FilesTimeChart from './components/FilesTimeChart';
+import { useFileInteractions } from './hooks/useFileInteractions';
+import { calculateMetricStats, getMetricColor, formatNanos, parseTime } from './utils/colorUtils';
+import { formatTimestamp, formatFileSize, shortenFileId, parseTimestamp } from './utils/chartCalculations';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -86,6 +92,8 @@ const MitoViz: React.FC = () => {
     const [filesSortBy, setFilesSortBy] = useState<string>('default');
     const [showFullFileIds, setShowFullFileIds] = useState<boolean>(false);
     const [fieldVisibility, setFieldVisibility] = useState<Record<string, boolean>>({});
+    const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [renderError, setRenderError] = useState<string | null>(null);
 
     const exampleData: MitoVizData = useMemo(() => ({
         partition_count: { count: 26415, mem_ranges: 0, files: 266, file_ranges: 26415 },
@@ -145,75 +153,61 @@ const MitoViz: React.FC = () => {
         }
     }, [exampleData]);
 
-    const handleRender = () => {
+    const handleRender = async () => {
+        setIsLoading(true);
+        setRenderError(null);
+        
         try {
+            if (!jsonInput.trim()) {
+                throw new Error('Please enter JSON data');
+            }
+            
             const parsedData = JSON.parse(jsonInput);
+            
+            // Validate required structure
+            if (typeof parsedData !== 'object' || parsedData === null) {
+                throw new Error('JSON data must be an object');
+            }
+            
+            // Add a small delay to show loading state
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
             setData(parsedData);
             if (parsedData.metrics_per_partition) {
                 setSelectedPartitions(new Set(parsedData.metrics_per_partition.map((p: Partition) => p.partition)));
             }
+            
             message.success('Data rendered successfully');
-        } catch {
-            message.error('Invalid JSON format');
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Invalid JSON format';
+            setRenderError(errorMessage);
+            message.error(errorMessage);
+        } finally {
+            setIsLoading(false);
         }
     };
 
-    const parseTimestamp = (timestamp: string): number => {
-        const parts = timestamp.split('::');
-        return parseInt(parts[0]);
-    };
-
-    const formatTimestamp = useCallback((timestamp: string): string => {
-        const ts = parseTimestamp(timestamp);
-        return new Date(ts).toISOString().replace('T', ' ').replace('Z', '');
-    }, []);
-
-    const formatFileSize = (bytes: number): string => {
-        const units = ['B', 'KB', 'MB', 'GB'];
-        let size = bytes;
-        let unitIndex = 0;
-
-        while (size >= 1024 && unitIndex < units.length - 1) {
-            size /= 1024;
-            unitIndex++;
-        }
-
-        return `${size.toFixed(1)} ${units[unitIndex]}`;
-    };
-
-    const shortenFileId = (fileId: string): string => {
-        return fileId.substring(0, 8) + '...';
-    };
-
-    const parseTime = (timeStr: string | number): number => {
-        if (typeof timeStr === 'number') return timeStr;
-        if (typeof timeStr !== 'string') return 0;
-
-        const value = parseFloat(timeStr);
-        if (isNaN(value)) return 0;
-
-        if (timeStr.endsWith('ns')) return value;
-        if (timeStr.endsWith('µs')) return value * 1000;
-        if (timeStr.endsWith('ms')) return value * 1000 * 1000;
-        if (timeStr.endsWith('s')) return value * 1000 * 1000 * 1000;
-        return value;
-    };
-
-    const formatNanos = (ns: number): string => {
-        if (ns < 1000) return `${ns.toFixed(0)}ns`;
-        if (ns < 1000 * 1000) return `${(ns / 1000).toFixed(3)}µs`;
-        if (ns < 1000 * 1000 * 1000) return `${(ns / (1000 * 1000)).toFixed(3)}ms`;
-        return `${(ns / (1000 * 1000 * 1000)).toFixed(3)}s`;
-    };
+    const { focusFile } = useFileInteractions({
+        filesContainerId: 'files-list-container',
+        highlightDuration: 2000,
+    });
 
     const formatFieldName = (name: string): string => {
         return name.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
     };
 
+    const [copiedText, setCopiedText] = useState<string | null>(null);
+    
     const copyToClipboard = async (text: string) => {
         try {
             await navigator.clipboard.writeText(text);
+            setCopiedText(text);
             message.success('Copied to clipboard');
+            
+            // Clear the copied state after 2 seconds
+            setTimeout(() => {
+                setCopiedText(null);
+            }, 2000);
         } catch {
             message.error('Failed to copy');
         }
@@ -255,6 +249,11 @@ const MitoViz: React.FC = () => {
             return isSelected && matchesSearch;
         });
     }, [data?.metrics_per_partition, selectedPartitions, searchTerm]);
+
+    const metricsStats = useMemo(() => {
+        if (!data?.metrics_per_partition) return {};
+        return calculateMetricStats(data.metrics_per_partition);
+    }, [data?.metrics_per_partition]);
 
     const summaryMetrics = useMemo(() => {
         const summary: Record<string, number> = {};
@@ -311,7 +310,7 @@ const MitoViz: React.FC = () => {
             size: formatFileSize(file.size),
             index_size: formatFileSize(file.index_size),
         }));
-    }, [sortedFiles, formatTimestamp]);
+    }, [sortedFiles]);
 
     const summaryTableData = useMemo(() => {
         return Object.entries(summaryMetrics).map(([key, value]) => {
@@ -341,7 +340,11 @@ const MitoViz: React.FC = () => {
             key: 'file_id',
             render: (_text: string, record: FileTableRecord) => (
                 <Tooltip title={record.file_id}>
-                    <Text code style={{ fontSize: '11px' }}>
+                    <Text 
+                        code 
+                        style={{ fontSize: '11px', cursor: 'default' }}
+                        id={`file-item-${record.file_id}`}
+                    >
                         {showFullFileIds ? record.file_id : record.short_id}
                     </Text>
                 </Tooltip>
@@ -393,13 +396,37 @@ const MitoViz: React.FC = () => {
                         rows={8}
                         style={{ fontFamily: 'monospace' }}
                     />
-                    <Button type="primary" onClick={handleRender}>
-                        Render
+                    <Button 
+                        type="primary" 
+                        onClick={handleRender}
+                        loading={isLoading}
+                        disabled={!jsonInput.trim()}
+                    >
+                        {isLoading ? 'Rendering...' : 'Render'}
                     </Button>
+                    {renderError && (
+                        <Alert
+                            message="Render Error"
+                            description={renderError}
+                            type="error"
+                            showIcon
+                            closable
+                            onClose={() => setRenderError(null)}
+                        />
+                    )}
                 </Space>
             </Card>
 
-            {data && (
+            {isLoading && (
+                <div style={{ textAlign: 'center', padding: '40px' }}>
+                    <Spin size="large" />
+                    <div style={{ marginTop: '16px', color: '#666' }}>
+                        Processing data...
+                    </div>
+                </div>
+            )}
+
+            {data && !isLoading && (
                 <>
                     <Row gutter={[16, 16]}>
                         <Col xs={24} lg={8}>
@@ -422,11 +449,22 @@ const MitoViz: React.FC = () => {
                                                 {data.projection.map((column, index) => (
                                                     <Tag
                                                         key={index}
-                                                        style={{ cursor: 'pointer' }}
+                                                        style={{ 
+                                                            cursor: 'pointer',
+                                                            backgroundColor: copiedText === column ? '#d4edda' : undefined,
+                                                            borderColor: copiedText === column ? '#c3e6cb' : undefined,
+                                                            color: copiedText === column ? '#155724' : undefined,
+                                                        }}
                                                         onClick={() => copyToClipboard(column)}
                                                         icon={<CopyOutlined />}
+                                                        title="Click to copy"
                                                     >
                                                         {column}
+                                                        {copiedText === column && (
+                                                            <span style={{ marginLeft: '4px', fontSize: '10px' }}>
+                                                                ✓
+                                                            </span>
+                                                        )}
                                                     </Tag>
                                                 ))}
                                             </Space>
@@ -461,7 +499,10 @@ const MitoViz: React.FC = () => {
                                             <Select.Option value="time_span">Time Span</Select.Option>
                                         </Select>
                                     </Space>
-                                    <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                                    <div 
+                                        id="files-list-container"
+                                        style={{ maxHeight: '300px', overflowY: 'auto' }}
+                                    >
                                         <Table
                                             dataSource={filesTableData}
                                             columns={filesColumns}
@@ -474,6 +515,13 @@ const MitoViz: React.FC = () => {
                             </Card>
                         </Col>
                     </Row>
+
+                    <FilesTimeChart
+                        files={sortedFiles}
+                        onFileClick={focusFile}
+                        height={200}
+                        className="mb-4"
+                    />
 
                     <Card title="Partitions Summary" size="small">
                         <Text type="secondary">
@@ -555,6 +603,8 @@ const MitoViz: React.FC = () => {
                                                         if (!isVisible) return null;
 
                                                         const isZero = value === 0 || value === '0ns';
+                                                        const color = getMetricColor(value, metricsStats[key]);
+                                                        
                                                         return (
                                                             <div
                                                                 key={key}
@@ -567,7 +617,12 @@ const MitoViz: React.FC = () => {
                                                                 }}
                                                             >
                                                                 <Text strong>{formatFieldName(key)}:</Text>
-                                                                <Text code>{String(value)}</Text>
+                                                                <Text 
+                                                                    code 
+                                                                    style={{ color: isZero ? 'inherit' : color }}
+                                                                >
+                                                                    {String(value)}
+                                                                </Text>
                                                             </div>
                                                         );
                                                     })}
