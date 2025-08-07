@@ -32,49 +32,24 @@ const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config, onConfigC
     const totalUsedPercent = config.parts.reduce((sum, part) => sum + part.percentage, 0);
     const initialUnusedPercent = Math.max(0, 100 - totalUsedPercent);
 
-    // Add unused space as an adjustable part
     const [parts, setParts] = useState<ResourcePart[]>([
         ...config.parts,
         { id: 'unused', name: 'Unused', percentage: initialUnusedPercent, color: '#e5e7eb' }
     ]);
     const [activePart, setActivePart] = useState<string | null>(null);
-    const [isPageVisible, setIsPageVisible] = useState(true);
+    const [isVisible, setIsVisible] = useState(true);
     const svgRef = useRef<SVGSVGElement>(null);
     const animationRef = useRef<number>();
-    const shouldAnimateRef = useRef<boolean>(true);
 
     const activePartData = parts.find(p => p.id === activePart);
+    const shouldAnimate = isActive && isVisible;
 
-    // Check if animation should be running
-    const shouldAnimate = isActive && isPageVisible;
-
-    // Update the ref whenever shouldAnimate changes
+    // Simple visibility detection
     useEffect(() => {
-        shouldAnimateRef.current = shouldAnimate;
-    }, [shouldAnimate]);
-
-    useEffect(() => {
-        const handleVisibilityChange = () => {
-            setIsPageVisible(!document.hidden);
-        };
-
+        const handleVisibilityChange = () => setIsVisible(!document.hidden);
         document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
     }, []);
-
-    useEffect(() => {
-        drawLines();
-        if (shouldAnimate) {
-            startWaveAnimation();
-        } else {
-            stopWaveAnimation();
-        }
-        return () => {
-            stopWaveAnimation();
-        };
-    }, [parts, totalSize, shouldAnimate]);
 
     // Notify parent of config changes
     useEffect(() => {
@@ -83,194 +58,125 @@ const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config, onConfigC
         }
     }, [totalSize, parts, onConfigChange, config.id]);
 
-    const startWaveAnimation = () => {
+    const adjustColorBrightness = (color: string, amount: number): string => {
+        const hex = color.replace('#', '');
+        const r = Math.max(0, Math.min(255, parseInt(hex.substring(0, 2), 16) + amount));
+        const g = Math.max(0, Math.min(255, parseInt(hex.substring(2, 4), 16) + amount));
+        const b = Math.max(0, Math.min(255, parseInt(hex.substring(4, 6), 16) + amount));
+        return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    };
+
+    const generateWavePath = (startX: number, width: number, amplitude: number, timeOffset: number): string => {
+        const totalWidth = 400;
+        const endX = startX + width;
+        if (width <= 0) return '';
+
+        const pathParts = [`M ${startX} 20`];
+        const steps = Math.max(6, Math.floor(width / 4));
+        const stepSize = width / steps;
+        
+        for (let i = 0; i <= steps; i++) {
+            const x = startX + i * stepSize;
+            const globalNormalizedX = x / totalWidth;
+            const y = 20 + Math.sin(globalNormalizedX * Math.PI * 8 + timeOffset) * amplitude;
+            pathParts.push(`L ${x} ${y}`);
+        }
+
+        pathParts.push(`L ${endX} 40 L ${startX} 40 Z`);
+        return pathParts.join(' ');
+    };
+
+    const updateWaves = () => {
+        if (!svgRef.current) return;
+        
+        const time = Date.now() * 0.001;
+        const waves = svgRef.current.querySelectorAll('.wave-path');
+        const totalWidth = 400;
+        let currentX = 0;
+
+        parts.forEach((part, partIndex) => {
+            const segmentWidth = (part.percentage / 100) * totalWidth;
+            if (segmentWidth <= 0) {
+                return;
+            }
+
+            // Update inner wave
+            const innerWaveIndex = partIndex * 2;
+            const innerWave = waves[innerWaveIndex] as SVGPathElement;
+            if (innerWave) {
+                const d = generateWavePath(currentX, segmentWidth, 4, time * 1.8 + Math.PI * 0.4);
+                innerWave.setAttribute('d', d);
+            }
+
+            // Update upper wave
+            const upperWaveIndex = partIndex * 2 + 1;
+            const upperWave = waves[upperWaveIndex] as SVGPathElement;
+            if (upperWave) {
+                const d = generateWavePath(currentX, segmentWidth, 6, time * 1.2);
+                upperWave.setAttribute('d', d);
+            }
+
+            currentX += segmentWidth;
+        });
+    };
+
+    const startAnimation = () => {
         if (animationRef.current) {
             cancelAnimationFrame(animationRef.current);
         }
 
-        let lastFrameTime = 0;
-        const targetFPS = 30;
-        const frameInterval = 1000 / targetFPS; // ~33.33ms for 30fps
-
-        const animate = (currentTime: number) => {
-            // Check if animation should continue
-            if (!shouldAnimateRef.current) {
-                animationRef.current = undefined;
-                return;
-            }
-
-            // Limit to 30fps
-            if (currentTime - lastFrameTime >= frameInterval) {
-                updateWaves();
-                lastFrameTime = currentTime;
-            }
-
+        const animate = () => {
+            if (!shouldAnimate) return;
+            updateWaves();
             animationRef.current = requestAnimationFrame(animate);
         };
-        animationRef.current = requestAnimationFrame(animate);
+
+        animate();
     };
 
-    const stopWaveAnimation = () => {
+    const stopAnimation = () => {
         if (animationRef.current) {
             cancelAnimationFrame(animationRef.current);
             animationRef.current = undefined;
         }
     };
 
-    const updateWaves = () => {
-        if (!svgRef.current) return;
-
-        const time = Date.now() * 0.001; // Convert to seconds
-        const waves = svgRef.current.querySelectorAll('.wave-path');
-
-        waves.forEach((wave, index) => {
-            const path = wave as SVGPathElement;
-            const segmentIndex = Math.floor(index / 2); // Two waves per segment
-            const isUpperWave = index % 2 === 0;
-
-            // Different wave parameters for different layers but same frequency for continuity
-            const amplitude = isUpperWave ? 6 : 4;
-            const speed = isUpperWave ? 1.2 : 1.8;
-            const phase = isUpperWave ? 0 : Math.PI * 0.4; // Phase difference between layers
-
-            const d = generateWavePath(
-                segmentIndex,
-                1, // Use same frequency for all segments for continuity
-                amplitude,
-                time * speed + phase
-            );
-            path.setAttribute('d', d);
-        });
-    };
-
-    const generateWavePath = (segmentIndex: number, _frequency: number, amplitude: number, timeOffset: number) => {
-        const totalWidth = 400;
-        let currentX = 0;
-
-        // Calculate segment boundaries
-        for (let i = 0; i < segmentIndex; i++) {
-            currentX += (parts[i].percentage / 100) * totalWidth;
-        }
-
-        const segmentWidth = (parts[segmentIndex].percentage / 100) * totalWidth;
-        const endX = currentX + segmentWidth;
-
-        if (segmentWidth <= 0) return '';
-
-        let path = `M ${currentX} 20`; // Start at middle height
-
-        // Generate continuous wave points across the entire pipe width
-        const steps = Math.max(10, Math.floor(segmentWidth / 2));
-        for (let i = 0; i <= steps; i++) {
-            const x = currentX + (i / steps) * segmentWidth;
-            // Use global x position for continuous waves across all segments
-            const globalNormalizedX = x / totalWidth;
-            const y = 20 + Math.sin(globalNormalizedX * Math.PI * 8 + timeOffset) * amplitude;
-            path += ` L ${x} ${y}`;
-        }
-
-        // Close the path to create a filled area
-        path += ` L ${endX} 40 L ${currentX} 40 Z`;
-
-        return path;
-    };
-
-    const handleFineTune = (type: 'percent' | 'size', value: number) => {
-        if (!activePartData) return;
-
-        let newPercent: number;
-        if (type === 'percent') {
-            newPercent = Math.max(0, Math.min(100, value));
-        } else {
-            newPercent = Math.max(0, Math.min(100, (value / totalSize) * 100));
-        }
-
-        const oldPercent = activePartData.percentage;
-        const diff = newPercent - oldPercent;
-
-        const otherParts = parts.filter(p => p.id !== activePart);
-        const totalOtherPercent = otherParts.reduce((sum, p) => sum + p.percentage, 0);
-
-        if (totalOtherPercent - diff < 0) {
-            return; // Not enough space
-        }
-
-        const newParts = parts.map(part => {
-            if (part.id === activePart) {
-                return { ...part, percentage: newPercent };
-            }
-
-            if (totalOtherPercent > 0) {
-                const proportion = part.percentage / totalOtherPercent;
-                return { ...part, percentage: Math.max(0, part.percentage - diff * proportion) };
-            }
-
-            return part;
-        });
-
-        // Ensure total doesn't exceed 100%
-        const total = newParts.reduce((sum, p) => sum + p.percentage, 0);
-        if (total > 100) {
-            const excess = total - 100;
-            const adjustmentParts = newParts.filter(p => p.id !== activePart);
-            const adjustmentTotal = adjustmentParts.reduce((sum, p) => sum + p.percentage, 0);
-
-            if (adjustmentTotal > 0) {
-                newParts.forEach(part => {
-                    if (part.id !== activePart) {
-                        const proportion = part.percentage / adjustmentTotal;
-                        part.percentage = Math.max(0, part.percentage - excess * proportion);
-                    }
-                });
-            }
-        }
-
-        setParts(newParts);
-    };
-
     const drawLines = () => {
         if (!svgRef.current) return;
 
-        // Clear existing content
         svgRef.current.innerHTML = '';
-
-        // Create base pipe structure with waves
         const totalWidth = 400;
-        let currentX = 0;
 
-        parts.forEach((part, _index) => {
+        parts.forEach((part) => {
             const segmentWidth = (part.percentage / 100) * totalWidth;
+            if (segmentWidth <= 0) return;
 
-            if (segmentWidth > 0) {
-                // Create inner wave layer (lighter)
-                const innerWave = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                innerWave.classList.add('wave-path');
-                innerWave.setAttribute('fill', part.color);
-                innerWave.setAttribute('opacity', '0.6');
-                svgRef.current!.appendChild(innerWave);
+            // Create inner wave layer
+            const innerWave = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            innerWave.classList.add('wave-path');
+            innerWave.setAttribute('fill', part.color);
+            innerWave.setAttribute('opacity', '0.6');
+            svgRef.current!.appendChild(innerWave);
 
-                // Create upper wave layer (deeper color)
-                const upperWave = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                upperWave.classList.add('wave-path');
-                const darkerColor = adjustColorBrightness(part.color, -40);
-                upperWave.setAttribute('fill', darkerColor);
-                upperWave.setAttribute('opacity', '0.8');
-                svgRef.current!.appendChild(upperWave);
-
-                currentX += segmentWidth;
-            }
+            // Create upper wave layer
+            const upperWave = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            upperWave.classList.add('wave-path');
+            const darkerColor = adjustColorBrightness(part.color, -40);
+            upperWave.setAttribute('fill', darkerColor);
+            upperWave.setAttribute('opacity', '0.8');
+            svgRef.current!.appendChild(upperWave);
         });
 
-        // Add universal shade overlay
+        // Add shade overlay
         const shadeOverlay = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         shadeOverlay.setAttribute('x', '0');
         shadeOverlay.setAttribute('y', '0');
         shadeOverlay.setAttribute('width', totalWidth.toString());
         shadeOverlay.setAttribute('height', '40');
         shadeOverlay.setAttribute('fill', 'url(#pipeGradient)');
-        svgRef.current!.appendChild(shadeOverlay);
+        svgRef.current.appendChild(shadeOverlay);
 
-        // Create gradient definition
+        // Create gradient
         const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
         const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
         gradient.setAttribute('id', 'pipeGradient');
@@ -295,17 +201,65 @@ const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config, onConfigC
         gradient.appendChild(stop2);
         gradient.appendChild(stop3);
         defs.appendChild(gradient);
-        svgRef.current!.insertBefore(defs, svgRef.current!.firstChild);
+        svgRef.current.insertBefore(defs, svgRef.current.firstChild);
     };
 
-    const adjustColorBrightness = (color: string, amount: number): string => {
-        // Simple color brightness adjustment
-        const hex = color.replace('#', '');
-        const r = Math.max(0, Math.min(255, parseInt(hex.substr(0, 2), 16) + amount));
-        const g = Math.max(0, Math.min(255, parseInt(hex.substr(2, 2), 16) + amount));
-        const b = Math.max(0, Math.min(255, parseInt(hex.substr(4, 2), 16) + amount));
+    useEffect(() => {
+        drawLines();
+        if (shouldAnimate) {
+            startAnimation();
+        } else {
+            stopAnimation();
+        }
+        return stopAnimation;
+    }, [parts, totalSize, shouldAnimate]);
 
-        return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    const handleFineTune = (type: 'percent' | 'size', value: number) => {
+        if (!activePartData) return;
+
+        let newPercent: number;
+        if (type === 'percent') {
+            newPercent = Math.max(0, Math.min(100, value));
+        } else {
+            newPercent = Math.max(0, Math.min(100, (value / totalSize) * 100));
+        }
+
+        const oldPercent = activePartData.percentage;
+        const diff = newPercent - oldPercent;
+        const otherParts = parts.filter(p => p.id !== activePart);
+        const totalOtherPercent = otherParts.reduce((sum, p) => sum + p.percentage, 0);
+
+        if (totalOtherPercent - diff < 0) return;
+
+        const newParts = parts.map(part => {
+            if (part.id === activePart) {
+                return { ...part, percentage: newPercent };
+            }
+            if (totalOtherPercent > 0) {
+                const proportion = part.percentage / totalOtherPercent;
+                return { ...part, percentage: Math.max(0, part.percentage - diff * proportion) };
+            }
+            return part;
+        });
+
+        // Ensure total doesn't exceed 100%
+        const total = newParts.reduce((sum, p) => sum + p.percentage, 0);
+        if (total > 100) {
+            const excess = total - 100;
+            const adjustmentParts = newParts.filter(p => p.id !== activePart);
+            const adjustmentTotal = adjustmentParts.reduce((sum, p) => sum + p.percentage, 0);
+
+            if (adjustmentTotal > 0) {
+                newParts.forEach(part => {
+                    if (part.id !== activePart) {
+                        const proportion = part.percentage / adjustmentTotal;
+                        part.percentage = Math.max(0, part.percentage - excess * proportion);
+                    }
+                });
+            }
+        }
+
+        setParts(newParts);
     };
 
     return (
@@ -329,7 +283,7 @@ const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config, onConfigC
                 />
             </div>
 
-            {/* Usage Pipe Visualization */}
+            {/* Usage Pipe Visualization - Original SVG Wave Animation */}
             <div className="relative">
                 <svg
                     ref={svgRef}
@@ -340,12 +294,14 @@ const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config, onConfigC
                 />
                 {/* Clickable overlay for segments */}
                 <div className="absolute inset-0 flex">
-                    {parts.map((part, _index) => {
+                    {parts.map((part) => {
                         const isActive = activePart === part.id;
                         return (
                             <div
                                 key={part.id}
-                                className={`h-full transition-all duration-500 cursor-pointer hover:bg-white hover:bg-opacity-10 ${isActive ? 'ring-2 ring-blue-400 ring-inset' : ''}`}
+                                className={`h-full transition-all duration-500 cursor-pointer hover:bg-white hover:bg-opacity-10 ${
+                                    isActive ? 'ring-2 ring-blue-400 ring-inset' : ''
+                                }`}
                                 style={{
                                     width: `${part.percentage}%`,
                                     backgroundColor: 'transparent',
@@ -359,46 +315,43 @@ const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config, onConfigC
             </div>
 
             {/* Legends */}
-            <div className="relative">
-                <div className="grid grid-cols-3 gap-2">
-                    {parts.map(part => {
-                        const partSize = totalSize * (part.percentage / 100);
-                        const isActive = activePart === part.id;
+            <div className="grid grid-cols-3 gap-2">
+                {parts.map(part => {
+                    const partSize = totalSize * (part.percentage / 100);
+                    const isActive = activePart === part.id;
 
-                        return (
-                            <Card
-                                key={part.id}
-                                size="small"
-                                className={`cursor-pointer text-center transition-all ${isActive ? 'ring-2 ring-blue-400 bg-blue-50' : 'hover:bg-gray-50'
-                                    }`}
-                                onClick={() => setActivePart(isActive ? null : part.id)}
-                                style={{
-                                    borderLeft: `4px solid ${part.color}`,
-                                }}
-                            >
-                                <div className="space-y-1">
-                                    <div className="flex items-center justify-center gap-2">
-                                        <div
-                                            className="w-3 h-3 rounded-full border border-gray-300"
-                                            style={{ backgroundColor: part.color }}
-                                        />
-                                        <Text strong>{part.name}</Text>
-                                    </div>
-                                    <div>
-                                        <Text className="text-xs opacity-80">
-                                            {partSize.toFixed(1)} GB
-                                        </Text>
-                                    </div>
-                                    <div>
-                                        <Text className="text-xs opacity-80">
-                                            {part.percentage.toFixed(0)}%
-                                        </Text>
-                                    </div>
+                    return (
+                        <Card
+                            key={part.id}
+                            size="small"
+                            className={`cursor-pointer text-center transition-all ${
+                                isActive ? 'ring-2 ring-blue-400 bg-blue-50' : 'hover:bg-gray-50'
+                            }`}
+                            onClick={() => setActivePart(isActive ? null : part.id)}
+                            style={{ borderLeft: `4px solid ${part.color}` }}
+                        >
+                            <div className="space-y-1">
+                                <div className="flex items-center justify-center gap-2">
+                                    <div
+                                        className="w-3 h-3 rounded-full border border-gray-300"
+                                        style={{ backgroundColor: part.color }}
+                                    />
+                                    <Text strong>{part.name}</Text>
                                 </div>
-                            </Card>
-                        );
-                    })}
-                </div>
+                                <div>
+                                    <Text className="text-xs opacity-80">
+                                        {partSize.toFixed(1)} GB
+                                    </Text>
+                                </div>
+                                <div>
+                                    <Text className="text-xs opacity-80">
+                                        {part.percentage.toFixed(0)}%
+                                    </Text>
+                                </div>
+                            </div>
+                        </Card>
+                    );
+                })}
             </div>
 
             {/* Fine-Tuning Controls */}
@@ -439,4 +392,4 @@ const ResourceAllocator: React.FC<ResourceAllocatorProps> = ({ config, onConfigC
     );
 };
 
-export default ResourceAllocator; 
+export default ResourceAllocator;
