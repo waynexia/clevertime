@@ -12,7 +12,7 @@ interface SQLResponse {
         columns: {
             column_def: {
                 name: { value: string };
-                data_type: string | { type: string;[key: string]: any };
+                data_type: string | { type: string;[key: string]: unknown };
             };
         }[];
         constraints: {
@@ -22,7 +22,7 @@ interface SQLResponse {
     };
 }
 
-function getDataType(dataType: string | { [key: string]: any }): string {
+function getDataType(dataType: string | { [key: string]: unknown }): string {
     if (typeof dataType === 'string') return dataType.toLowerCase();
     return Object.keys(dataType)[0].toLowerCase();
 }

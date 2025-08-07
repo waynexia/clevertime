@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Typography, ConfigProvider, Tabs } from 'antd';
-import { ExperimentOutlined, SettingOutlined, BarChartOutlined, DatabaseOutlined, EditOutlined } from '@ant-design/icons';
+import { ExperimentOutlined, BarChartOutlined, DatabaseOutlined, EditOutlined } from '@ant-design/icons';
 import ModelOptimizer from './model_optimizer/ModelOptimizer';
-import ConfigOptimizer from './model_optimizer/ConfigOptimizer';
 import CacheCalculator from './cache_calculator/CacheCalculator';
 import 'uno.css';
 import MitoViz from './mitoviz/MitoViz';

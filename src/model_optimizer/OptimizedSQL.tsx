@@ -28,7 +28,7 @@ const OptimizedSQL: React.FC<OptimizedSQLProps> = ({ suggestions = mockSuggestio
             setCopiedIndex(index);
             message.success('SQL copied to clipboard');
             setTimeout(() => setCopiedIndex(null), 3000);
-        } catch (err) {
+        } catch {
             message.error('Failed to copy SQL');
         }
     };
