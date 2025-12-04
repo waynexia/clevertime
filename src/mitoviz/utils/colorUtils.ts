@@ -26,40 +26,58 @@ export function formatNanos(ns: number): string {
     return `${(ns / (1000 * 1000 * 1000)).toFixed(3)}s`;
 }
 
-export function calculateMetricStats(partitions: Array<{ metrics: Record<string, string | number> }>): Record<string, MetricStats> {
+export function calculateMetricStats(partitions: Array<{ metrics: Record<string, string | number | Record<string, string | number | undefined> | boolean | undefined> }>): Record<string, MetricStats> {
     const stats: Record<string, MetricStats> = {};
-    
+
+    const processValue = (key: string, value: string | number) => {
+        if (!stats[key]) {
+            stats[key] = {
+                min: Infinity,
+                max: -Infinity,
+                isTime: false,
+                isNumeric: true
+            };
+        }
+
+        const stat = stats[key];
+
+        if (typeof value === 'string' && (value.endsWith('ns') || value.endsWith('µs') || value.endsWith('ms') || value.endsWith('s'))) {
+            const ns = parseTime(value);
+            if (ns > 0) {
+                stat.min = Math.min(stat.min, ns);
+                stat.max = Math.max(stat.max, ns);
+            }
+            stat.isTime = true;
+        } else if (typeof value === 'number') {
+            if (value > 0) {
+                stat.min = Math.min(stat.min, value);
+                stat.max = Math.max(stat.max, value);
+            }
+        }
+    };
+
     partitions.forEach(partition => {
         Object.entries(partition.metrics).forEach(([key, value]) => {
-            if (!stats[key]) {
-                stats[key] = { 
-                    min: Infinity, 
-                    max: -Infinity, 
-                    isTime: false, 
-                    isNumeric: true 
-                };
+            // Handle nested metrics
+            if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                Object.entries(value).forEach(([nestedKey, nestedValue]) => {
+                    if (nestedValue !== undefined && (typeof nestedValue === 'string' || typeof nestedValue === 'number')) {
+                        processValue(`${key}.${nestedKey}`, nestedValue);
+                    }
+                });
+                return;
             }
-            
-            const stat = stats[key];
-            
-            if (typeof value === 'string' && (value.endsWith('ns') || value.endsWith('µs') || value.endsWith('ms') || value.endsWith('s'))) {
-                const ns = parseTime(value);
-                if (ns > 0) {
-                    stat.min = Math.min(stat.min, ns);
-                    stat.max = Math.max(stat.max, ns);
-                }
-                stat.isTime = true;
-            } else if (typeof value === 'number') {
-                if (value > 0) {
-                    stat.min = Math.min(stat.min, value);
-                    stat.max = Math.max(stat.max, value);
-                }
-            } else {
-                stat.isNumeric = false;
+
+            // Handle boolean values
+            if (typeof value === 'boolean' || value === undefined) {
+                return;
             }
+
+            // Handle simple metrics
+            processValue(key, value);
         });
     });
-    
+
     return stats;
 }
 
