@@ -23,6 +23,7 @@ import FilesTimeChart from './components/FilesTimeChart';
 import { useFileInteractions } from './hooks/useFileInteractions';
 import { calculateMetricStats, getMetricColor, formatNanos, parseTime } from './utils/colorUtils';
 import { formatTimestamp, formatFileSize, shortenFileId, parseTimestamp } from './utils/chartCalculations';
+import { isNestedMetric, NestedMetrics } from './utils/typeGuards';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -42,10 +43,6 @@ interface FileData {
     rows: number;
     size: number;
     index_size: number;
-}
-
-interface NestedMetrics {
-    [key: string]: string | number | undefined;
 }
 
 interface PartitionMetrics {
@@ -206,10 +203,6 @@ const MitoViz: React.FC = () => {
         return name.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
     };
 
-    const isNestedMetric = (value: unknown): value is NestedMetrics => {
-        return typeof value === 'object' && value !== null && !Array.isArray(value);
-    };
-
     const isEmptyNestedMetric = (value: NestedMetrics): boolean => {
         return Object.keys(value).length === 0;
     };
@@ -278,29 +271,24 @@ const MitoViz: React.FC = () => {
 
         filteredPartitions.forEach(partition => {
             Object.entries(partition.metrics).forEach(([key, value]) => {
-                // Skip nested metrics and booleans in summary
-                if (isNestedMetric(value) || typeof value === 'boolean') {
+                if (isNestedMetric(value)) {
                     // Handle nested metrics - flatten them for summary
-                    if (isNestedMetric(value)) {
-                        Object.entries(value).forEach(([nestedKey, nestedValue]) => {
-                            if (nestedValue !== undefined) {
-                                const flatKey = `${key}.${nestedKey}`;
-                                if (typeof nestedValue === 'number') {
-                                    summary[flatKey] = (summary[flatKey] || 0) + nestedValue;
-                                } else if (typeof nestedValue === 'string') {
-                                    summary[flatKey] = (summary[flatKey] || 0) + parseTime(nestedValue);
-                                }
+                    Object.entries(value).forEach(([nestedKey, nestedValue]) => {
+                        if (nestedValue !== undefined) {
+                            const flatKey = `${key}.${nestedKey}`;
+                            if (typeof nestedValue === 'number') {
+                                summary[flatKey] = (summary[flatKey] || 0) + nestedValue;
+                            } else if (typeof nestedValue === 'string') {
+                                summary[flatKey] = (summary[flatKey] || 0) + parseTime(nestedValue);
                             }
-                        });
-                    }
-                    return;
-                }
-
-                if (typeof value === 'number') {
+                        }
+                    });
+                } else if (typeof value === 'number') {
                     summary[key] = (summary[key] || 0) + value;
                 } else if (typeof value === 'string') {
                     summary[key] = (summary[key] || 0) + parseTime(value);
                 }
+                // boolean and undefined values are implicitly ignored
             });
         });
 
@@ -661,7 +649,7 @@ const MitoViz: React.FC = () => {
                                                                                         fontSize: '11px',
                                                                                     }}
                                                                                 >
-                                                                                    <Text style={{ fontSize: '11px' }}>{formatFieldName(`${key}.${nestedKey}`)}:</Text>
+                                                                                    <Text style={{ fontSize: '11px' }}>{formatFieldName(nestedKey)}:</Text>
                                                                                     <Text
                                                                                         code
                                                                                         style={{ color: isZero ? 'inherit' : color, fontSize: '11px' }}

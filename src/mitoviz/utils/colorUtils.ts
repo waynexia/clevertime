@@ -1,3 +1,5 @@
+import { isNestedMetric } from './typeGuards';
+
 export interface MetricStats {
     min: number;
     max: number;
@@ -59,7 +61,7 @@ export function calculateMetricStats(partitions: Array<{ metrics: Record<string,
     partitions.forEach(partition => {
         Object.entries(partition.metrics).forEach(([key, value]) => {
             // Handle nested metrics
-            if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+            if (isNestedMetric(value)) {
                 Object.entries(value).forEach(([nestedKey, nestedValue]) => {
                     if (nestedValue !== undefined && (typeof nestedValue === 'string' || typeof nestedValue === 'number')) {
                         processValue(`${key}.${nestedKey}`, nestedValue);

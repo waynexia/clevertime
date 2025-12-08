@@ -29,18 +29,19 @@ export function parseTimestamp(timestamp: string): number {
     const unit = parts[1];
 
     // Convert to milliseconds based on the unit
-    if (unit === 'Nanosecond') {
-        return value / 1_000_000;
-    } else if (unit === 'Microsecond') {
-        return value / 1_000;
-    } else if (unit === 'Millisecond') {
-        return value;
-    } else if (unit === 'Second') {
-        return value * 1_000;
+    switch (unit) {
+        case 'Nanosecond':
+            return value / 1_000_000;
+        case 'Microsecond':
+            return value / 1_000;
+        case 'Second':
+            return value * 1_000;
+        case 'Millisecond':
+            return value;
+        default:
+            // Default: assume milliseconds if no unit specified
+            return value;
     }
-
-    // Default: assume milliseconds if no unit specified
-    return value;
 }
 
 export function formatTimestamp(timestamp: string): string {
