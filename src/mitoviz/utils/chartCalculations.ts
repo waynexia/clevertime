@@ -25,7 +25,23 @@ export interface ChartDimensions {
 
 export function parseTimestamp(timestamp: string): number {
     const parts = timestamp.split('::');
-    return parseInt(parts[0]);
+    const value = parseInt(parts[0]);
+    const unit = parts[1];
+
+    // Convert to milliseconds based on the unit
+    switch (unit) {
+        case 'Nanosecond':
+            return value / 1_000_000;
+        case 'Microsecond':
+            return value / 1_000;
+        case 'Second':
+            return value * 1_000;
+        case 'Millisecond':
+            return value;
+        default:
+            // Default: assume milliseconds if no unit specified
+            return value;
+    }
 }
 
 export function formatTimestamp(timestamp: string): string {

@@ -23,6 +23,7 @@ import FilesTimeChart from './components/FilesTimeChart';
 import { useFileInteractions } from './hooks/useFileInteractions';
 import { calculateMetricStats, getMetricColor, formatNanos, parseTime } from './utils/colorUtils';
 import { formatTimestamp, formatFileSize, shortenFileId, parseTimestamp } from './utils/chartCalculations';
+import { isNestedMetric, NestedMetrics } from './utils/typeGuards';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -45,7 +46,7 @@ interface FileData {
 }
 
 interface PartitionMetrics {
-    [key: string]: string | number;
+    [key: string]: string | number | NestedMetrics | boolean | undefined;
 }
 
 interface Partition {
@@ -193,7 +194,17 @@ const MitoViz: React.FC = () => {
     });
 
     const formatFieldName = (name: string): string => {
+        // Handle nested metrics with dots
+        if (name.includes('.')) {
+            return name.split('.').map(part =>
+                part.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+            ).join('/');
+        }
         return name.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    };
+
+    const isEmptyNestedMetric = (value: NestedMetrics): boolean => {
+        return Object.keys(value).length === 0;
     };
 
     const [copiedText, setCopiedText] = useState<string | null>(null);
@@ -260,11 +271,24 @@ const MitoViz: React.FC = () => {
 
         filteredPartitions.forEach(partition => {
             Object.entries(partition.metrics).forEach(([key, value]) => {
-                if (typeof value === 'number') {
+                if (isNestedMetric(value)) {
+                    // Handle nested metrics - flatten them for summary
+                    Object.entries(value).forEach(([nestedKey, nestedValue]) => {
+                        if (nestedValue !== undefined) {
+                            const flatKey = `${key}.${nestedKey}`;
+                            if (typeof nestedValue === 'number') {
+                                summary[flatKey] = (summary[flatKey] || 0) + nestedValue;
+                            } else if (typeof nestedValue === 'string') {
+                                summary[flatKey] = (summary[flatKey] || 0) + parseTime(nestedValue);
+                            }
+                        }
+                    });
+                } else if (typeof value === 'number') {
                     summary[key] = (summary[key] || 0) + value;
-                } else {
+                } else if (typeof value === 'string') {
                     summary[key] = (summary[key] || 0) + parseTime(value);
                 }
+                // boolean and undefined values are implicitly ignored
             });
         });
 
@@ -314,9 +338,7 @@ const MitoViz: React.FC = () => {
 
     const summaryTableData = useMemo(() => {
         return Object.entries(summaryMetrics).map(([key, value]) => {
-            const isTime = filteredPartitions.length > 0 &&
-                typeof filteredPartitions[0].metrics[key] === 'string' &&
-                (filteredPartitions[0].metrics[key] as string).match(/(ns|µs|ms|s)$/);
+            const isTime = metricsStats[key]?.isTime ?? false;
 
             return {
                 key,
@@ -325,7 +347,7 @@ const MitoViz: React.FC = () => {
                 visible: fieldVisibility[key] ?? (value !== 0),
             };
         });
-    }, [summaryMetrics, fieldVisibility, filteredPartitions]);
+    }, [summaryMetrics, fieldVisibility, metricsStats]);
 
     const topLevelColumns = [
         { title: 'Field', dataIndex: 'field', key: 'field' },
@@ -599,12 +621,63 @@ const MitoViz: React.FC = () => {
                                                 {Object.entries(partition.metrics)
                                                     .sort(([a], [b]) => a.localeCompare(b))
                                                     .map(([key, value]) => {
+                                                        // Handle nested metrics
+                                                        if (isNestedMetric(value)) {
+                                                            if (isEmptyNestedMetric(value)) {
+                                                                return null;
+                                                            }
+
+                                                            return (
+                                                                <div key={key} style={{ marginBottom: '8px' }}>
+                                                                    <Text strong style={{ fontSize: '12px', color: '#1890ff' }}>
+                                                                        {formatFieldName(key)}:
+                                                                    </Text>
+                                                                    <div style={{ marginLeft: '12px', marginTop: '4px' }}>
+                                                                        {Object.entries(value).map(([nestedKey, nestedValue]) => {
+                                                                            if (nestedValue === undefined) return null;
+                                                                            const isZero = nestedValue === 0 || nestedValue === '0ns';
+                                                                            const color = getMetricColor(nestedValue, metricsStats[`${key}.${nestedKey}`]);
+
+                                                                            return (
+                                                                                <div
+                                                                                    key={nestedKey}
+                                                                                    style={{
+                                                                                        display: 'flex',
+                                                                                        justifyContent: 'space-between',
+                                                                                        padding: '2px 0',
+                                                                                        opacity: isZero ? 0.5 : 1,
+                                                                                        fontSize: '11px',
+                                                                                    }}
+                                                                                >
+                                                                                    <Text style={{ fontSize: '11px' }}>{formatFieldName(nestedKey)}:</Text>
+                                                                                    <Text
+                                                                                        code
+                                                                                        style={{ color: isZero ? 'inherit' : color, fontSize: '11px' }}
+                                                                                    >
+                                                                                        {typeof nestedValue === 'number' && metricsStats[`${key}.${nestedKey}`]?.isTime
+                                                                                            ? formatNanos(nestedValue)
+                                                                                            : String(nestedValue)}
+                                                                                    </Text>
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        }
+
+                                                        // Handle boolean values
+                                                        if (typeof value === 'boolean') {
+                                                            return null;
+                                                        }
+
+                                                        // Handle simple metrics
                                                         const isVisible = fieldVisibility[key] ?? (value !== 0 && value !== '0ns');
                                                         if (!isVisible) return null;
 
                                                         const isZero = value === 0 || value === '0ns';
                                                         const color = getMetricColor(value, metricsStats[key]);
-                                                        
+
                                                         return (
                                                             <div
                                                                 key={key}
@@ -617,8 +690,8 @@ const MitoViz: React.FC = () => {
                                                                 }}
                                                             >
                                                                 <Text strong>{formatFieldName(key)}:</Text>
-                                                                <Text 
-                                                                    code 
+                                                                <Text
+                                                                    code
                                                                     style={{ color: isZero ? 'inherit' : color }}
                                                                 >
                                                                     {String(value)}
